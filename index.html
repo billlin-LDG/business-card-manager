@@ -17,12 +17,14 @@
 <body>
     <div id="root"></div>
 
+    <!-- Firebase SDK 相容版 -->
     <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-storage-compat.js"></script>
 
     <script type="text/babel">
-        const { useState, useEffect } = React;
+        const { useState, useEffect, useRef } = React;
 
         const firebaseConfig = {
           apiKey: "AIzaSyCUtA1xlHf8-tW7gNheA1on7oOrRWPaDBY",
@@ -37,6 +39,7 @@
         firebase.initializeApp(firebaseConfig);
         const auth = firebase.auth();
         const db = firebase.firestore();
+        const storage = firebase.storage();
         const provider = new firebase.auth.GoogleAuthProvider();
 
         const ALLOWED_DOMAINS = ["leadgene.com.tw"];
@@ -44,11 +47,15 @@
         function App() {
             const [user, setUser] = useState(null);
             const [loading, setLoading] = useState(true);
+            const [uploading, setUploading] = useState(false);
             const [cards, setCards] = useState([]);
             const [searchTerm, setSearchTerm] = useState('');
             const [isModalOpen, setIsModalOpen] = useState(false);
-            const [formData, setFormData] = useState({ name: '', title: '', company: '', phone: '', email: '', note: '' });
+            const [formData, setFormData] = useState({ name: '', title: '', company: '', phone: '', email: '', note: '', imageUrl: '' });
+            const [imageFile, setImageFile] = useState(null);
+            const [imagePreview, setImagePreview] = useState(null);
             const [editingId, setEditingId] = useState(null);
+            const fileInputRef = useRef(null);
 
             useEffect(() => {
                 const unsubscribe = auth.onAuthStateChanged((u) => {
@@ -75,23 +82,40 @@
                     .onSnapshot(snap => {
                         const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
                         setCards(list);
-                    }, (err) => {
-                        console.error("Firestore 讀取錯誤:", err.code);
-                    });
+                    }, (err) => console.error("Firestore error:", err));
                 return () => unsubscribe();
             }, [user]);
+
+            const handleImageChange = (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    if (file.size > 5 * 1024 * 1024) {
+                        alert("檔案太大（限制 5MB 以下）");
+                        return;
+                    }
+                    setImageFile(file);
+                    const reader = new FileReader();
+                    reader.onloadend = () => setImagePreview(reader.result);
+                    reader.readAsDataURL(file);
+                }
+            };
 
             const handleSubmit = async (e) => {
                 e.preventDefault();
                 if (!user) return;
+                setUploading(true);
 
-                const ref = db.collection('artifacts').doc('business-card-manager').collection('public').doc('data').collection('cards');
-                
+                let finalImageUrl = formData.imageUrl;
+
                 try {
-                    const payload = { 
-                        ...formData, 
-                        updatedAt: Date.now() 
-                    };
+                    if (imageFile) {
+                        const storageRef = storage.ref(`business-cards/${Date.now()}_${imageFile.name}`);
+                        const snapshot = await storageRef.put(imageFile);
+                        finalImageUrl = await snapshot.ref.getDownloadURL();
+                    }
+
+                    const ref = db.collection('artifacts').doc('business-card-manager').collection('public').doc('data').collection('cards');
+                    const payload = { ...formData, imageUrl: finalImageUrl, updatedAt: Date.now() };
 
                     if (editingId) {
                         await ref.doc(editingId).update({ ...payload, lastUpdatedBy: user.email });
@@ -100,18 +124,29 @@
                     }
                     closeModal();
                 } catch (error) {
-                    console.error("Firestore 儲存錯誤:", error);
-                    alert(`儲存失敗！\n錯誤碼：${error.code}\n\n請確認：\n1. Firebase Rules 已點擊「發佈」按鈕\n2. 您目前登入的帳號是：${user.email}`);
+                    console.error("儲存失敗:", error);
+                    alert("儲存失敗！請確認 Firebase Storage 與 Firestore 規則均已發佈。");
+                } finally {
+                    setUploading(false);
                 }
             };
 
             const closeModal = () => {
                 setIsModalOpen(false);
                 setEditingId(null);
-                setFormData({ name: '', title: '', company: '', phone: '', email: '', note: '' });
+                setFormData({ name: '', title: '', company: '', phone: '', email: '', note: '', imageUrl: '' });
+                setImageFile(null);
+                setImagePreview(null);
             };
 
-            if (loading) return <div className="flex h-screen items-center justify-center font-bold text-indigo-600 animate-pulse">Leadgene 系統啟動中...</div>;
+            const openEditModal = (card) => {
+                setEditingId(card.id);
+                setFormData({ ...card });
+                setImagePreview(card.imageUrl || null);
+                setIsModalOpen(true);
+            };
+
+            if (loading) return <div className="flex h-screen items-center justify-center font-bold text-indigo-600 animate-pulse">Leadgene 系統載入中...</div>;
 
             if (!user) return (
                 <div className="flex h-screen items-center justify-center bg-slate-100 p-4">
@@ -119,11 +154,10 @@
                         <div className="w-20 h-20 bg-indigo-600 rounded-3xl flex items-center justify-center text-white mx-auto mb-8 shadow-xl rotate-3">
                             <i data-lucide="users" className="w-10 h-10"></i>
                         </div>
-                        <h1 className="text-3xl font-black text-slate-800 mb-2 tracking-tighter">Team Cards</h1>
-                        <p className="text-slate-400 text-sm mb-10 font-bold uppercase tracking-widest">Shared Database</p>
-                        <button onClick={() => auth.signInWithPopup(provider)} className="w-full py-4 border-2 border-slate-100 rounded-2xl font-bold flex items-center justify-center gap-3 hover:bg-slate-50 transition-all active:scale-95 shadow-sm">
+                        <h1 className="text-3xl font-black text-slate-800 mb-2">Team Cards</h1>
+                        <button onClick={() => auth.signInWithPopup(provider)} className="w-full py-4 border-2 border-slate-100 rounded-2xl font-bold flex items-center justify-center gap-3 hover:bg-slate-50 transition-all active:scale-95 text-slate-700">
                             <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-5 h-5" alt="Google"/>
-                            Google 帳號登入
+                            使用 Google 帳號登入
                         </button>
                     </div>
                 </div>
@@ -131,10 +165,10 @@
 
             return (
                 <div className="min-h-screen">
-                    <nav className="sticky top-0 bg-white/90 backdrop-blur-md border-b h-20 flex items-center px-8 justify-between z-40">
+                    <nav className="sticky top-0 bg-white/90 backdrop-blur-md border-b h-20 flex items-center px-8 justify-between z-40 text-slate-800">
                         <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg"><i data-lucide="users" className="w-6 h-6"></i></div>
-                            <span className="font-black text-slate-800 text-xl tracking-tight">Leadgene Shared</span>
+                            <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg"><i data-lucide="contact-2" className="w-6 h-6"></i></div>
+                            <span className="font-black text-xl">Leadgene Shared</span>
                         </div>
                         <div className="flex items-center gap-4">
                             <button onClick={() => setIsModalOpen(true)} className="bg-slate-900 text-white px-6 py-2.5 rounded-2xl text-sm font-bold shadow-xl active:scale-95 transition-all">新增名片</button>
@@ -147,28 +181,42 @@
                             <i data-lucide="search" className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5"></i>
                             <input 
                                 type="text" placeholder="搜尋團隊共用名片..." 
-                                className="w-full pl-14 pr-6 py-4 rounded-3xl bg-white border-none shadow-xl focus:ring-4 focus:ring-indigo-500/10 outline-none text-lg font-medium"
+                                className="w-full pl-14 pr-6 py-4 rounded-3xl bg-white border-none shadow-xl focus:ring-4 focus:ring-indigo-500/10 outline-none text-lg"
                                 value={searchTerm} onChange={e => setSearchTerm(e.target.value)}
                             />
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                            {cards.filter(c => c.name.toLowerCase().includes(searchTerm.toLowerCase())).map(card => (
-                                <div key={card.id} className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100 hover:shadow-2xl transition-all group relative">
-                                    <div className="absolute top-6 right-6 flex gap-2 opacity-0 group-hover:opacity-100 transition-all translate-y-2 group-hover:translate-y-0">
-                                        <button onClick={() => { setEditingId(card.id); setFormData(card); setIsModalOpen(true); }} className="p-2.5 bg-indigo-50 text-indigo-600 rounded-xl"><i data-lucide="edit-3" className="w-4 h-4"></i></button>
-                                        <button onClick={() => { if(confirm('確定要從共用簿中刪除？')) db.collection('artifacts').doc('business-card-manager').collection('public').doc('data').collection('cards').doc(card.id).delete() }} className="p-2.5 bg-red-50 text-red-500 rounded-xl hover:bg-red-500 hover:text-white transition-all"><i data-lucide="trash-2" className="w-4 h-4"></i></button>
+                            {cards.filter(c => c.name?.toLowerCase().includes(searchTerm.toLowerCase())).map(card => (
+                                <div key={card.id} className="bg-white rounded-[2.5rem] shadow-sm border border-slate-100 hover:shadow-2xl transition-all group overflow-hidden flex flex-col">
+                                    <div className="w-full h-48 bg-slate-50 relative flex items-center justify-center border-b">
+                                        {card.imageUrl ? (
+                                            <img src={card.imageUrl} className="w-full h-full object-cover" alt={card.name} />
+                                        ) : (
+                                            <div className="text-slate-200"><i data-lucide="image" className="w-12 h-12"></i></div>
+                                        )}
+                                        <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-all translate-y-2 group-hover:translate-y-0">
+                                            <button onClick={() => openEditModal(card)} className="p-2.5 bg-white/90 backdrop-blur-md text-indigo-600 rounded-xl shadow-lg"><i data-lucide="edit-3" className="w-4 h-4"></i></button>
+                                            <button onClick={() => { if(confirm('確定刪除？')) db.collection('artifacts').doc('business-card-manager').collection('public').doc('data').collection('cards').doc(card.id).delete() }} className="p-2.5 bg-white/90 backdrop-blur-md text-red-500 rounded-xl shadow-lg"><i data-lucide="trash-2" className="w-4 h-4"></i></button>
+                                        </div>
                                     </div>
-                                    <div className="w-16 h-16 bg-indigo-50 rounded-2xl flex items-center justify-center text-indigo-600 font-black text-2xl mb-6 shadow-inner">{card.name[0]}</div>
-                                    <h3 className="font-black text-slate-800 text-xl mb-1">{card.name}</h3>
-                                    <p className="text-sm text-indigo-600 font-black mb-6 tracking-wide uppercase">{card.title || 'Personal'}</p>
-                                    <div className="space-y-3 pt-6 border-t border-slate-50 text-sm text-slate-500 font-medium">
-                                        <div className="flex items-center gap-3 text-slate-400"><i data-lucide="building-2" className="w-4 h-4"></i><span className="text-slate-600">{card.company || '—'}</span></div>
-                                        {card.phone && <div className="flex items-center gap-3 text-slate-400"><i data-lucide="phone" className="w-4 h-4"></i><span className="text-slate-600">{card.phone}</span></div>}
-                                        {card.email && <div className="flex items-center gap-3 text-slate-400"><i data-lucide="mail" className="w-4 h-4"></i><span className="text-slate-600 truncate">{card.email}</span></div>}
-                                    </div>
-                                    <div className="mt-6 pt-4 border-t border-slate-50 text-[10px] text-slate-300 font-bold uppercase tracking-tighter">
-                                        Author: {card.createdBy?.split('@')[0]}
+                                    <div className="p-8">
+                                        <div className="flex items-center gap-4 mb-4">
+                                            <div className="w-12 h-12 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600 font-black text-xl">{card.name?.[0]}</div>
+                                            <div className="min-w-0">
+                                                <h3 className="font-black text-slate-800 text-lg truncate">{card.name}</h3>
+                                                <p className="text-xs text-indigo-600 font-bold uppercase truncate">{card.title || 'Personal'}</p>
+                                            </div>
+                                        </div>
+                                        <div className="space-y-3 text-sm text-slate-500">
+                                            <div className="flex items-center gap-3"><i data-lucide="building-2" className="w-4 h-4 text-slate-300"></i><span className="truncate">{card.company || '—'}</span></div>
+                                            {card.phone && <div className="flex items-center gap-3"><i data-lucide="phone" className="w-4 h-4 text-slate-300"></i>{card.phone}</div>}
+                                            {card.email && <div className="flex items-center gap-3"><i data-lucide="mail" className="w-4 h-4 text-slate-300"></i><span className="truncate">{card.email}</span></div>}
+                                        </div>
+                                        <div className="mt-6 pt-4 border-t border-slate-50 text-[10px] text-slate-300 font-bold flex justify-between">
+                                            <span>Author: {card.createdBy?.split('@')[0]}</span>
+                                            <span>{new Date(card.createdAt).toLocaleDateString()}</span>
+                                        </div>
                                     </div>
                                 </div>
                             ))}
@@ -176,24 +224,38 @@
                     </main>
 
                     {isModalOpen && (
-                        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
-                            <div className="bg-white w-full max-w-lg rounded-[3.5rem] p-10 shadow-2xl animate-in zoom-in duration-300">
+                        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md overflow-y-auto">
+                            <div className="bg-white w-full max-w-lg rounded-[3.5rem] p-10 shadow-2xl my-auto animate-in zoom-in duration-300">
                                 <div className="flex justify-between items-center mb-8">
-                                    <h3 className="text-2xl font-black text-slate-800 tracking-tight">{editingId ? '修改名片' : '新增共用名片'}</h3>
-                                    <button onClick={closeModal} className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-slate-200 text-slate-400 transition-colors"><i data-lucide="x" className="w-6 h-6"></i></button>
+                                    <h3 className="text-2xl font-black text-slate-800">{editingId ? '修改名片' : '新增共用名片'}</h3>
+                                    <button onClick={closeModal} className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-slate-100 text-slate-400"><i data-lucide="x" className="w-6 h-6"></i></button>
                                 </div>
                                 <form onSubmit={handleSubmit} className="space-y-5">
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">名片照片</label>
+                                        <div onClick={() => fileInputRef.current.click()} className="w-full h-40 bg-slate-50 rounded-3xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center cursor-pointer hover:bg-slate-100 transition-all overflow-hidden relative">
+                                            {imagePreview ? <img src={imagePreview} className="w-full h-full object-cover" /> : <>
+                                                <i data-lucide="camera" className="w-8 h-8 text-slate-300 mb-2"></i>
+                                                <span className="text-xs text-slate-400 font-bold">點擊選擇照片</span>
+                                            </>}
+                                        </div>
+                                        <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleImageChange} />
+                                    </div>
                                     <input required placeholder="姓名 *" className="w-full px-6 py-4 bg-slate-50 rounded-2xl border-none outline-none focus:ring-4 focus:ring-indigo-500/10 text-slate-700 font-bold" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
                                     <div className="grid grid-cols-2 gap-5">
-                                        <input placeholder="職位" className="w-full px-6 py-4 bg-slate-50 rounded-2xl border-none outline-none focus:ring-4 focus:ring-indigo-500/10 text-slate-700 font-bold" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} />
-                                        <input placeholder="公司" className="w-full px-6 py-4 bg-slate-50 rounded-2xl border-none outline-none focus:ring-4 focus:ring-indigo-500/10 text-slate-700 font-bold" value={formData.company} onChange={e => setFormData({...formData, company: e.target.value})} />
+                                        <input placeholder="職位" className="w-full px-6 py-4 bg-slate-50 rounded-2xl border-none outline-none focus:ring-4 focus:ring-indigo-500/10 font-bold" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} />
+                                        <input placeholder="公司" className="w-full px-6 py-4 bg-slate-50 rounded-2xl border-none outline-none focus:ring-4 focus:ring-indigo-500/10 font-bold" value={formData.company} onChange={e => setFormData({...formData, company: e.target.value})} />
                                     </div>
-                                    <input placeholder="電話" className="w-full px-6 py-4 bg-slate-50 rounded-2xl border-none outline-none focus:ring-4 focus:ring-indigo-500/10 text-slate-700 font-bold" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} />
-                                    <input type="email" placeholder="Email" className="w-full px-6 py-4 bg-slate-50 rounded-2xl border-none outline-none focus:ring-4 focus:ring-indigo-500/10 text-slate-700 font-bold" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} />
-                                    <textarea placeholder="備註或細節" rows="2" className="w-full px-6 py-4 bg-slate-50 rounded-2xl border-none outline-none focus:ring-4 focus:ring-indigo-500/10 text-slate-700 font-bold" value={formData.note} onChange={e => setFormData({...formData, note: e.target.value})} />
+                                    <div className="grid grid-cols-2 gap-5">
+                                        <input placeholder="電話" className="w-full px-6 py-4 bg-slate-50 rounded-2xl border-none outline-none focus:ring-4 focus:ring-indigo-500/10 font-bold" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} />
+                                        <input type="email" placeholder="Email" className="w-full px-6 py-4 bg-slate-50 rounded-2xl border-none outline-none focus:ring-4 focus:ring-indigo-500/10 font-bold" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} />
+                                    </div>
+                                    <textarea placeholder="備註" rows="2" className="w-full px-6 py-4 bg-slate-50 rounded-2xl border-none outline-none focus:ring-4 focus:ring-indigo-500/10 font-bold" value={formData.note} onChange={e => setFormData({...formData, note: e.target.value})} />
                                     <div className="pt-6 flex gap-4">
-                                        <button type="button" onClick={closeModal} className="flex-1 py-4 text-slate-400 font-black uppercase text-xs tracking-widest">取消</button>
-                                        <button type="submit" className="flex-[2] py-4 bg-indigo-600 text-white rounded-[1.5rem] font-black shadow-lg uppercase text-xs tracking-widest">儲存共享</button>
+                                        <button type="button" onClick={closeModal} className="flex-1 py-4 text-slate-400 font-bold" disabled={uploading}>取消</button>
+                                        <button type="submit" className="flex-[2] py-4 bg-indigo-600 text-white rounded-[1.5rem] font-bold shadow-lg flex items-center justify-center gap-2" disabled={uploading}>
+                                            {uploading ? <div className="animate-spin h-4 w-4 border-2 border-white/20 border-t-white rounded-full"></div> : "儲存共享"}
+                                        </button>
                                     </div>
                                 </form>
                             </div>
