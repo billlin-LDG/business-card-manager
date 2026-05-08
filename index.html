@@ -28,7 +28,7 @@
         </div>
     </div>
 
-    <!-- Firebase SDK (已移除 Storage 模組，節省資源並避免綁卡提示) -->
+    <!-- Firebase SDK (不含 Storage，純 Firestore 運作) -->
     <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
@@ -75,11 +75,12 @@
             useEffect(() => {
                 const unsubscribe = auth.onAuthStateChanged((u) => {
                     if (u) {
-                        const domain = u.email ? u.email.toLowerCase().split('@')[1] : "";
+                        const email = (u.email || "").toLowerCase();
+                        const domain = email.split('@')[1];
                         if (ALLOWED_DOMAINS.includes(domain)) {
                             setUser(u);
                         } else {
-                            alert("非公司帳號，請更換 @leadgene.com.tw 帳號登入");
+                            alert("非公司帳號 (" + email + ")，存取受限");
                             auth.signOut();
                         }
                     } else {
@@ -119,7 +120,7 @@
                     img.src = event.target.result;
                     img.onload = () => {
                         const canvas = document.createElement('canvas');
-                        const MAX_WIDTH = 500; // 降低寬度確保體積更小
+                        const MAX_WIDTH = 500; 
                         let width = img.width;
                         let height = img.height;
 
@@ -133,7 +134,6 @@
                         const ctx = canvas.getContext('2d');
                         ctx.drawImage(img, 0, 0, width, height);
 
-                        // 降低品質至 0.6，減少文字長度
                         const compressedBase64 = canvas.toDataURL('image/jpeg', 0.6);
                         setFormData(prev => ({ ...prev, imageUrl: compressedBase64 }));
                         setUploading(false);
@@ -161,8 +161,8 @@
                     }
                     closeModal();
                 } catch (error) {
-                    console.error("儲存失敗:", error);
-                    alert(`儲存失敗！錯誤碼: ${error.code}\n\n關鍵檢查：\n1. 您的 Firebase Rules 是否已「發佈」？\n2. 登入帳號是否為公司 Email？\n目前的帳號為：${user.email}`);
+                    console.error("儲存詳細錯誤:", error);
+                    alert(`儲存失敗！錯誤碼: ${error.code}\n\n原因：${error.message}\n\n目前的帳號為：${user.email}`);
                 } finally {
                     setUploading(false);
                 }
@@ -172,6 +172,7 @@
                 setIsModalOpen(false);
                 setEditingId(null);
                 setFormData({ name: '', title: '', company: '', phone: '', email: '', note: '', imageUrl: '' });
+                if (fileInputRef.current) fileInputRef.current.value = "";
             };
 
             const openEditModal = (card) => {
@@ -197,8 +198,9 @@
                             <div className="w-20 h-20 bg-indigo-600 rounded-3xl flex items-center justify-center text-white mx-auto mb-8 shadow-xl rotate-3">
                                 <span className="material-icons text-[40px]">group</span>
                             </div>
-                            <h1 className="text-3xl font-black text-slate-800 mb-2">Team Cards</h1>
-                            <button onClick={() => auth.signInWithPopup(provider)} className="w-full py-4 border-2 border-slate-100 rounded-2xl font-bold flex items-center justify-center gap-3 hover:bg-slate-50 transition-all active:scale-95 text-slate-700">
+                            <h1 className="text-3xl font-black text-slate-800 mb-2 tracking-tighter">Team Cards</h1>
+                            <p className="text-slate-400 text-sm mb-10 font-bold uppercase tracking-widest">Shared Database</p>
+                            <button onClick={() => auth.signInWithPopup(provider)} className="w-full py-4 border-2 border-slate-100 rounded-2xl font-bold flex items-center justify-center gap-3 hover:bg-slate-50 transition-all active:scale-95 shadow-sm">
                                 <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-5 h-5" alt="Google"/>
                                 使用 Google 帳號登入
                             </button>
@@ -216,7 +218,7 @@
                 <div className="min-h-screen">
                     <nav className="sticky top-0 bg-white/90 backdrop-blur-md border-b h-20 flex items-center px-8 justify-between z-40 text-slate-800">
                         <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg"><span className="material-icons text-[24px]">contact_page</span></div>
+                            <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg"><i data-lucide="contact-2" className="w-6 h-6"></i></div>
                             <span className="font-black text-xl tracking-tight">Leadgene Shared</span>
                         </div>
                         <div className="flex items-center gap-4">
@@ -230,7 +232,7 @@
                             <span className="material-icons absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 text-[24px]">search</span>
                             <input 
                                 type="text" placeholder="搜尋姓名或公司..." 
-                                className="w-full pl-14 pr-6 py-4 rounded-3xl bg-white border-none shadow-xl focus:ring-4 focus:ring-indigo-500/10 outline-none text-lg"
+                                className="w-full pl-14 pr-6 py-4 rounded-3xl bg-white border-none shadow-xl focus:ring-4 focus:ring-indigo-500/10 outline-none text-lg font-medium"
                                 value={searchTerm} onChange={e => setSearchTerm(e.target.value)}
                             />
                         </div>
@@ -251,7 +253,7 @@
                                     </div>
                                     <div className="p-8">
                                         <div className="flex items-center gap-4 mb-4">
-                                            <div className="w-12 h-12 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600 font-black text-xl">{card.name?.[0] || '?'}</div>
+                                            <div className="w-12 h-12 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600 font-black text-xl flex-shrink-0">{card.name?.[0] || '?'}</div>
                                             <div className="min-w-0">
                                                 <h3 className="font-black text-slate-800 text-lg truncate">{card.name || '未命名'}</h3>
                                                 <p className="text-xs text-indigo-600 font-bold uppercase truncate">{card.title || 'Personal'}</p>
@@ -263,7 +265,7 @@
                                             {card.email && <div className="flex items-center gap-3"><span className="material-icons text-[18px] text-slate-300">email</span><span className="truncate">{card.email}</span></div>}
                                         </div>
                                         <div className="mt-6 pt-4 border-t border-slate-50 text-[10px] text-slate-300 font-bold flex justify-between uppercase tracking-tighter">
-                                            <span>Author: {card.createdBy?.split('@')[0]}</span>
+                                            <span>Added: {card.createdBy?.split('@')[0]}</span>
                                             <span>{card.createdAt ? new Date(card.createdAt).toLocaleDateString() : ''}</span>
                                         </div>
                                     </div>
@@ -281,7 +283,7 @@
                                 </div>
                                 <form onSubmit={handleSubmit} className="space-y-5">
                                     <div className="space-y-2">
-                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">名片照片 (自動壓縮)</label>
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">名片照片 (點擊上傳)</label>
                                         <div onClick={() => fileInputRef.current.click()} className="w-full h-48 bg-slate-50 rounded-3xl border-2 border-dashed border-slate-300 flex flex-col items-center justify-center cursor-pointer hover:bg-slate-100 transition-all overflow-hidden relative group">
                                             {uploading && formData.imageUrl === '' ? (
                                                 <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-indigo-600"></div>
@@ -308,7 +310,7 @@
                                     <textarea placeholder="備註" rows="2" className="w-full px-6 py-4 bg-slate-50 rounded-2xl border-none outline-none focus:ring-4 focus:ring-indigo-500/10 font-bold" value={formData.note} onChange={e => setFormData({...formData, note: e.target.value})} />
                                     <div className="pt-6 flex gap-4">
                                         <button type="button" onClick={closeModal} className="flex-1 py-4 text-slate-400 font-bold" disabled={uploading}>取消</button>
-                                        <button type="submit" className="flex-[2] py-4 bg-indigo-600 text-white rounded-[1.5rem] font-bold shadow-lg flex items-center justify-center gap-2" disabled={uploading}>
+                                        <button type="submit" className="flex-[2] py-4 bg-indigo-600 text-white rounded-[1.5rem] font-bold shadow-lg flex items-center justify-center gap-2 hover:bg-indigo-700 transition-all" disabled={uploading}>
                                             {uploading ? (
                                                 <>
                                                     <div className="animate-spin h-4 w-4 border-2 border-white/20 border-t-white rounded-full"></div>
