@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -11,9 +12,14 @@
     <script src="https://unpkg.com/lucide@latest"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700;900&display=swap');
-        body { font-family: 'Noto Sans TC', sans-serif; background-color: #f8fafc; }
+
+        body {
+            font-family: 'Noto Sans TC', sans-serif;
+            background-color: #f8fafc;
+        }
     </style>
 </head>
+
 <body>
     <div id="root"></div>
 
@@ -26,15 +32,15 @@
         const { useState, useEffect } = React;
 
         // --- Firebase 配置 ---
-        // 請務必確認這裡的資訊與您在 Firebase 控制台看到的一模一樣
+        // 已經更新為您提供的最新 API Key
         const firebaseConfig = {
-          apiKey: "AIzaSyCUtA1xlHf8-tW7gNhEAlon7oOrRWPaDBY",
-          authDomain: "business-card-manager-a68c8.firebaseapp.com",
-          projectId: "business-card-manager-a68c8",
-          storageBucket: "business-card-manager-a68c8.firebasestorage.app",
-          messagingSenderId: "501258821389",
-          appId: "1:501258821389:web:599a9abaa68dbe189f9a44",
-          measurementId: "G-5YEL14QEVX"
+            apiKey: "AIzaSyCUtA1xlHf8-tW7gNheA1on7oOrRWPaDBY",
+            authDomain: "business-card-manager-a68c8.firebaseapp.com",
+            projectId: "business-card-manager-a68c8",
+            storageBucket: "business-card-manager-a68c8.firebasestorage.app",
+            messagingSenderId: "501258821389",
+            appId: "1:501258821389:web:599a9abaa68dbe189f9a44",
+            measurementId: "G-5YEL14QEVX"
         };
 
         // 初始化 Firebase (加入簡單的防錯處理)
@@ -98,9 +104,9 @@
                 } catch (error) {
                     console.error("登入錯誤代碼:", error.code);
                     console.error("完整錯誤訊息:", error.message);
-                    
+
                     if (error.code === 'auth/api-key-not-valid') {
-                        alert("API Key 無效。請回到 Firebase Console -> 專案設定，確認 API Key 是否正確。如果是剛建立專案，請等待幾分鐘。");
+                        alert("API Key 無效。請回到 Firebase Console -> 專案設定，確認 API Key 是否正確。");
                     } else if (error.code === 'auth/popup-blocked') {
                         alert("登入彈窗被瀏覽器攔截，請允許開啟彈窗。");
                     } else if (error.code === 'auth/unauthorized-domain') {
@@ -165,7 +171,7 @@
                         <h1 className="text-3xl font-black text-slate-800 mb-2 tracking-tighter">Team Cards</h1>
                         <p className="text-slate-400 text-sm mb-10 font-medium">Leadgene 團隊共用名片系統</p>
                         <button onClick={handleLogin} className="w-full py-4 bg-white border-2 border-slate-100 rounded-2xl font-bold flex items-center justify-center gap-3 hover:bg-slate-50 transition-all active:scale-95 shadow-sm text-slate-700">
-                            <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-5 h-5" alt="Google"/>
+                            <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-5 h-5" alt="Google" />
                             使用 Google 帳號登入
                         </button>
                     </div>
@@ -188,8 +194,8 @@
                     <main className="max-w-6xl mx-auto p-8">
                         <div className="relative mb-12 max-w-2xl mx-auto">
                             <i data-lucide="search" className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5"></i>
-                            <input 
-                                type="text" placeholder="搜尋團隊共用名片..." 
+                            <input
+                                type="text" placeholder="搜尋團隊共用名片..."
                                 className="w-full pl-14 pr-6 py-4 rounded-3xl bg-white border-none shadow-xl shadow-slate-200/50 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all text-lg"
                                 value={searchTerm} onChange={e => setSearchTerm(e.target.value)}
                             />
@@ -200,7 +206,7 @@
                                 <div key={card.id} className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100 hover:shadow-2xl transition-all group relative">
                                     <div className="absolute top-6 right-6 flex gap-2 opacity-0 group-hover:opacity-100 transition-all translate-y-2 group-hover:translate-y-0">
                                         <button onClick={() => { setEditingId(card.id); setFormData(card); setIsModalOpen(true); }} className="p-2.5 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-600 hover:text-white transition-all"><i data-lucide="edit-3" className="w-4 h-4"></i></button>
-                                        <button onClick={() => { if(confirm('刪除？')) db.collection('artifacts').doc('business-card-manager').collection('public').doc('data').collection('cards').doc(card.id).delete() }} className="p-2.5 bg-red-50 text-red-500 rounded-xl hover:bg-red-500 hover:text-white transition-all"><i data-lucide="trash-2" className="w-4 h-4"></i></button>
+                                        <button onClick={() => { if (confirm('刪除？')) db.collection('artifacts').doc('business-card-manager').collection('public').doc('data').collection('cards').doc(card.id).delete() }} className="p-2.5 bg-red-50 text-red-500 rounded-xl hover:bg-red-500 hover:text-white transition-all"><i data-lucide="trash-2" className="w-4 h-4"></i></button>
                                     </div>
                                     <div className="w-16 h-16 bg-indigo-50 rounded-2xl flex items-center justify-center text-indigo-600 font-black text-2xl mb-6 shadow-inner">{card.name[0]}</div>
                                     <h3 className="font-black text-slate-800 text-xl mb-1">{card.name}</h3>
@@ -224,14 +230,14 @@
                                     <button onClick={closeModal} className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-slate-200 text-slate-400 transition-colors"><i data-lucide="x" className="w-6 h-6"></i></button>
                                 </div>
                                 <form onSubmit={handleSubmit} className="space-y-5">
-                                    <input required placeholder="姓名 *" className="w-full px-6 py-4 bg-slate-50 rounded-2xl border-none outline-none focus:ring-4 focus:ring-indigo-500/10 text-slate-700 font-bold" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
+                                    <input required placeholder="姓名 *" className="w-full px-6 py-4 bg-slate-50 rounded-2xl border-none outline-none focus:ring-4 focus:ring-indigo-500/10 text-slate-700 font-bold" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} />
                                     <div className="grid grid-cols-2 gap-5">
-                                        <input placeholder="職位" className="w-full px-6 py-4 bg-slate-50 rounded-2xl border-none outline-none focus:ring-4 focus:ring-indigo-500/10 text-slate-700 font-bold" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} />
-                                        <input placeholder="公司" className="w-full px-6 py-4 bg-slate-50 rounded-2xl border-none outline-none focus:ring-4 focus:ring-indigo-500/10 text-slate-700 font-bold" value={formData.company} onChange={e => setFormData({...formData, company: e.target.value})} />
+                                        <input placeholder="職位" className="w-full px-6 py-4 bg-slate-50 rounded-2xl border-none outline-none focus:ring-4 focus:ring-indigo-500/10 text-slate-700 font-bold" value={formData.title} onChange={e => setFormData({ ...formData, title: e.target.value })} />
+                                        <input placeholder="公司" className="w-full px-6 py-4 bg-slate-50 rounded-2xl border-none outline-none focus:ring-4 focus:ring-indigo-500/10 text-slate-700 font-bold" value={formData.company} onChange={e => setFormData({ ...formData, company: e.target.value })} />
                                     </div>
-                                    <input placeholder="電話" className="w-full px-6 py-4 bg-slate-50 rounded-2xl border-none outline-none focus:ring-4 focus:ring-indigo-500/10 text-slate-700 font-bold" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} />
-                                    <input type="email" placeholder="Email" className="w-full px-6 py-4 bg-slate-50 rounded-2xl border-none outline-none focus:ring-4 focus:ring-indigo-500/10 text-slate-700 font-bold" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} />
-                                    <textarea placeholder="備註" rows="2" className="w-full px-6 py-4 bg-slate-50 rounded-2xl border-none outline-none focus:ring-4 focus:ring-indigo-500/10 text-slate-700 font-bold" value={formData.note} onChange={e => setFormData({...formData, note: e.target.value})} />
+                                    <input placeholder="電話" className="w-full px-6 py-4 bg-slate-50 rounded-2xl border-none outline-none focus:ring-4 focus:ring-indigo-500/10 text-slate-700 font-bold" value={formData.phone} onChange={e => setFormData({ ...formData, phone: e.target.value })} />
+                                    <input type="email" placeholder="Email" className="w-full px-6 py-4 bg-slate-50 rounded-2xl border-none outline-none focus:ring-4 focus:ring-indigo-500/10 text-slate-700 font-bold" value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })} />
+                                    <textarea placeholder="備註" rows="2" className="w-full px-6 py-4 bg-slate-50 rounded-2xl border-none outline-none focus:ring-4 focus:ring-indigo-500/10 text-slate-700 font-bold" value={formData.note} onChange={e => setFormData({ ...formData, note: e.target.value })} />
                                     <div className="pt-6 flex gap-4">
                                         <button type="button" onClick={closeModal} className="flex-1 py-4 text-slate-400 font-black uppercase text-xs">取消</button>
                                         <button type="submit" className="flex-[2] py-4 bg-indigo-600 text-white rounded-[1.5rem] font-black shadow-lg uppercase text-xs tracking-widest">儲存共享</button>
@@ -249,4 +255,5 @@
         setInterval(() => lucide.createIcons(), 1000);
     </script>
 </body>
+
 </html>
