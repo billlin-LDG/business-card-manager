@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Leadgene 團隊共用名片簿</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700;900&display=swap');
+        body { font-family: 'Noto Sans TC', sans-serif; background-color: #f8fafc; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <!-- Firebase SDK 相容版 -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        // --- Firebase 配置 ---
+        const firebaseConfig = {
+          apiKey: "AIzaSyCUtA1xlHf8-tW7gNhEAlon7oOrRWPaDBY",
+          authDomain: "business-card-manager-a68c8.firebaseapp.com",
+          projectId: "business-card-manager-a68c8",
+          storageBucket: "business-card-manager-a68c8.firebasestorage.app",
+          messagingSenderId: "501258821389",
+          appId: "1:501258821389:web:599a9abaa68dbe189f9a44",
+          measurementId: "G-5YEL14QEVX"
+        };
+
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+        const provider = new firebase.auth.GoogleAuthProvider();
+
+        const ALLOWED_DOMAINS = ["leadgene.com.tw"];
+
+        function App() {
+            const [user, setUser] = useState(null);
+            const [loading, setLoading] = useState(true);
+            const [isDenied, setIsDenied] = useState(false);
+            const [cards, setCards] = useState([]);
+            const [searchTerm, setSearchTerm] = useState('');
+            const [isModalOpen, setIsModalOpen] = useState(false);
+            const [formData, setFormData] = useState({ name: '', title: '', company: '', phone: '', email: '', note: '' });
+            const [editingId, setEditingId] = useState(null);
+
+            useEffect(() => {
+                const unsubscribe = auth.onAuthStateChanged((u) => {
+                    if (u) {
+                        const domain = u.email.split('@')[1];
+                        if (ALLOWED_DOMAINS.includes(domain)) {
+                            setUser(u);
+                            setIsDenied(false);
+                        } else {
+                            setIsDenied(true);
+                            auth.signOut();
+                        }
+                    } else {
+                        setUser(null);
+                    }
+                    setLoading(false);
+                });
+                return () => unsubscribe();
+            }, []);
+
+            useEffect(() => {
+                if (!user) return;
+                // 使用共用路徑
+                const unsubscribe = db.collection('artifacts').doc('business-card-manager').collection('public').doc('data').collection('cards')
+                    .orderBy('createdAt', 'desc')
+                    .onSnapshot(snap => {
+                        const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                        setCards(list);
+                    }, (err) => console.error("Firestore error:", err));
+                return () => unsubscribe();
+            }, [user]);
+
+            const handleLogin = () => auth.signInWithPopup(provider);
+            const handleLogout = () => auth.signOut();
+
+            const handleSubmit = async (e) => {
+                e.preventDefault();
+                const ref = db.collection('artifacts').doc('business-card-manager').collection('public').doc('data').collection('cards');
+                try {
+                    if (editingId) {
+                        await ref.doc(editingId).update({ ...formData, lastUpdatedBy: user.email });
+                    } else {
+                        await ref.add({ ...formData, createdAt: Date.now(), createdBy: user.email });
+                    }
+                    closeModal();
+                } catch (error) {
+                    alert("儲存失敗，請檢查 Firebase 安全規則。");
+                }
+            };
+
+            const closeModal = () => {
+                setIsModalOpen(false);
+                setEditingId(null);
+                setFormData({ name: '', title: '', company: '', phone: '', email: '', note: '' });
+            };
+
+            if (loading) return <div className="flex h-screen items-center justify-center">載入中...</div>;
+
+            if (isDenied) return (
+                <div className="flex h-screen items-center justify-center bg-slate-100 p-4">
+                    <div className="bg-white p-10 rounded-[2.5rem] shadow-2xl text-center max-w-sm w-full">
+                        <h2 className="text-2xl font-black text-red-500 mb-4">存取受限</h2>
+                        <p className="text-slate-500">此系統僅限 @leadgene.com.tw 使用。</p>
+                        <button onClick={() => setIsDenied(false)} className="mt-8 w-full py-4 bg-slate-900 text-white rounded-2xl">返回</button>
+                    </div>
+                </div>
+            );
+
+            if (!user) return (
+                <div className="flex h-screen items-center justify-center bg-slate-100 p-4">
+                    <div className="bg-white p-12 rounded-[3rem] shadow-2xl text-center max-w-sm w-full">
+                        <div className="w-20 h-20 bg-indigo-600 rounded-3xl flex items-center justify-center text-white mx-auto mb-8 shadow-xl rotate-3">
+                            <i data-lucide="users" className="w-10 h-10"></i>
+                        </div>
+                        <h1 className="text-3xl font-black text-slate-800 mb-2">Team Cards</h1>
+                        <p className="text-slate-400 text-sm mb-10">Leadgene 團隊共用名片系統</p>
+                        <button onClick={handleLogin} className="w-full py-4 border-2 border-slate-100 rounded-2xl font-bold flex items-center justify-center gap-3 hover:bg-slate-50 transition-all active:scale-95">
+                            <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-5 h-5"/>
+                            Google 登入
+                        </button>
+                    </div>
+                </div>
+            );
+
+            return (
+                <div className="min-h-screen">
+                    <nav className="sticky top-0 bg-white/80 backdrop-blur-md border-b h-20 flex items-center px-8 justify-between z-40">
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg"><i data-lucide="users" className="w-6 h-6"></i></div>
+                            <span className="font-black text-slate-800 text-xl">SharedBook</span>
+                        </div>
+                        <div className="flex items-center gap-4">
+                            <button onClick={() => setIsModalOpen(true)} className="bg-slate-900 text-white px-6 py-2.5 rounded-2xl text-sm font-bold shadow-xl active:scale-95 transition-all">新增名片</button>
+                            <button onClick={handleLogout} className="text-slate-300 hover:text-red-500 transition-colors"><i data-lucide="log-out" className="w-6 h-6"></i></button>
+                        </div>
+                    </nav>
+
+                    <main className="max-w-6xl mx-auto p-8">
+                        <div className="relative mb-12 max-w-2xl mx-auto">
+                            <i data-lucide="search" className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5"></i>
+                            <input 
+                                type="text" placeholder="搜尋團隊共用名片..." 
+                                className="w-full pl-14 pr-6 py-4 rounded-3xl bg-white border-none shadow-xl focus:ring-4 focus:ring-indigo-500/10 outline-none text-lg"
+                                value={searchTerm} onChange={e => setSearchTerm(e.target.value)}
+                            />
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                            {cards.filter(c => c.name.toLowerCase().includes(searchTerm.toLowerCase())).map(card => (
+                                <div key={card.id} className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100 hover:shadow-2xl transition-all group relative">
+                                    <div className="absolute top-6 right-6 flex gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                                        <button onClick={() => { setEditingId(card.id); setFormData(card); setIsModalOpen(true); }} className="p-2.5 bg-indigo-50 text-indigo-600 rounded-xl"><i data-lucide="edit-3" className="w-4 h-4"></i></button>
+                                        <button onClick={() => { if(confirm('刪除？')) db.collection('artifacts').doc('business-card-manager').collection('public').doc('data').collection('cards').doc(card.id).delete() }} className="p-2.5 bg-red-50 text-red-500 rounded-xl"><i data-lucide="trash-2" className="w-4 h-4"></i></button>
+                                    </div>
+                                    <div className="w-16 h-16 bg-indigo-50 rounded-2xl flex items-center justify-center text-indigo-600 font-black text-2xl mb-6">{card.name[0]}</div>
+                                    <h3 className="font-black text-slate-800 text-xl mb-1">{card.name}</h3>
+                                    <p className="text-sm text-indigo-600 font-black mb-6 uppercase tracking-wide">{card.title || 'Personal'}</p>
+                                    <div className="space-y-3 pt-6 border-t border-slate-50 text-sm text-slate-500">
+                                        <div className="flex items-center gap-3"><i data-lucide="building-2" className="w-4 h-4"></i>{card.company || '—'}</div>
+                                        {card.phone && <div className="flex items-center gap-3"><i data-lucide="phone" className="w-4 h-4"></i>{card.phone}</div>}
+                                        {card.email && <div className="flex items-center gap-3"><i data-lucide="mail" className="w-4 h-4"></i><span className="truncate">{card.email}</span></div>}
+                                    </div>
+                                    <div className="mt-6 pt-4 border-t border-slate-50 text-[10px] text-slate-300 font-bold uppercase tracking-tighter">By: {card.createdBy?.split('@')[0]}</div>
+                                </div>
+                            ))}
+                        </div>
+                    </main>
+
+                    {isModalOpen && (
+                        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
+                            <div className="bg-white w-full max-w-lg rounded-[3.5rem] p-10 shadow-2xl">
+                                <h3 className="text-2xl font-black text-slate-800 mb-8">{editingId ? '修改名片' : '新增共用名片'}</h3>
+                                <form onSubmit={handleSubmit} className="space-y-5">
+                                    <input required placeholder="姓名 *" className="w-full px-6 py-4 bg-slate-50 rounded-2xl border-none outline-none focus:ring-4 focus:ring-indigo-500/10 text-slate-700 font-bold" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
+                                    <div className="grid grid-cols-2 gap-5">
+                                        <input placeholder="職位" className="w-full px-6 py-4 bg-slate-50 rounded-2xl border-none outline-none focus:ring-4 focus:ring-indigo-500/10 text-slate-700 font-bold" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} />
+                                        <input placeholder="公司" className="w-full px-6 py-4 bg-slate-50 rounded-2xl border-none outline-none focus:ring-4 focus:ring-indigo-500/10 text-slate-700 font-bold" value={formData.company} onChange={e => setFormData({...formData, company: e.target.value})} />
+                                    </div>
+                                    <input placeholder="電話" className="w-full px-6 py-4 bg-slate-50 rounded-2xl border-none outline-none focus:ring-4 focus:ring-indigo-500/10 text-slate-700 font-bold" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} />
+                                    <input type="email" placeholder="Email" className="w-full px-6 py-4 bg-slate-50 rounded-2xl border-none outline-none focus:ring-4 focus:ring-indigo-500/10 text-slate-700 font-bold" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} />
+                                    <textarea placeholder="備註" rows="2" className="w-full px-6 py-4 bg-slate-50 rounded-2xl border-none outline-none focus:ring-4 focus:ring-indigo-500/10 text-slate-700 font-bold" value={formData.note} onChange={e => setFormData({...formData, note: e.target.value})} />
+                                    <div className="pt-6 flex gap-4">
+                                        <button type="button" onClick={closeModal} className="flex-1 py-4 text-slate-400 font-black uppercase text-xs">取消</button>
+                                        <button type="submit" className="flex-[2] py-4 bg-indigo-600 text-white rounded-[1.5rem] font-black shadow-lg uppercase text-xs tracking-widest">儲存共享</button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+        setInterval(() => lucide.createIcons(), 1000);
+    </script>
+</body>
+</html>
