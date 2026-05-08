@@ -74,7 +74,6 @@
 
             useEffect(() => {
                 if (!user) return;
-                // 使用共用路徑
                 const unsubscribe = db.collection('artifacts').doc('business-card-manager').collection('public').doc('data').collection('cards')
                     .orderBy('createdAt', 'desc')
                     .onSnapshot(snap => {
@@ -84,7 +83,22 @@
                 return () => unsubscribe();
             }, [user]);
 
-            const handleLogin = () => auth.signInWithPopup(provider);
+            const handleLogin = async () => {
+                try {
+                    // 使用彈窗登入
+                    await auth.signInWithPopup(provider);
+                } catch (error) {
+                    console.error("Login Error:", error);
+                    if (error.code === 'auth/popup-blocked') {
+                        alert("登入彈窗被瀏覽器攔截了，請允許彈窗視窗。");
+                    } else if (error.code === 'auth/unauthorized-domain') {
+                        alert("此網域尚未在 Firebase 授權。請至 Firebase 控制台將您的 GitHub 網址加入『授權網域』。");
+                    } else {
+                        alert("登入發生錯誤：" + error.message);
+                    }
+                }
+            };
+
             const handleLogout = () => auth.signOut();
 
             const handleSubmit = async (e) => {
@@ -108,28 +122,38 @@
                 setFormData({ name: '', title: '', company: '', phone: '', email: '', note: '' });
             };
 
-            if (loading) return <div className="flex h-screen items-center justify-center">載入中...</div>;
+            if (loading) return (
+                <div className="flex h-screen items-center justify-center bg-slate-50">
+                    <div className="flex flex-col items-center gap-4">
+                        <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-indigo-600"></div>
+                        <p className="text-slate-500 font-medium">安全載入中...</p>
+                    </div>
+                </div>
+            );
 
             if (isDenied) return (
                 <div className="flex h-screen items-center justify-center bg-slate-100 p-4">
-                    <div className="bg-white p-10 rounded-[2.5rem] shadow-2xl text-center max-w-sm w-full">
-                        <h2 className="text-2xl font-black text-red-500 mb-4">存取受限</h2>
-                        <p className="text-slate-500">此系統僅限 @leadgene.com.tw 使用。</p>
-                        <button onClick={() => setIsDenied(false)} className="mt-8 w-full py-4 bg-slate-900 text-white rounded-2xl">返回</button>
+                    <div className="bg-white p-10 rounded-[2.5rem] shadow-2xl text-center max-w-sm w-full border border-red-100">
+                        <div className="w-20 h-20 bg-red-50 text-red-500 rounded-3xl flex items-center justify-center mx-auto mb-6">
+                            <i data-lucide="shield-alert" className="w-10 h-10"></i>
+                        </div>
+                        <h2 className="text-2xl font-black text-slate-800 mb-2">存取受限</h2>
+                        <p className="text-slate-500 text-sm leading-relaxed">此系統僅限 <span className="text-indigo-600 font-bold">@leadgene.com.tw</span> 帳號存取。</p>
+                        <button onClick={() => setIsDenied(false)} className="mt-8 w-full py-4 bg-slate-900 text-white rounded-2xl font-bold shadow-lg active:scale-95 transition-all">返回登入</button>
                     </div>
                 </div>
             );
 
             if (!user) return (
                 <div className="flex h-screen items-center justify-center bg-slate-100 p-4">
-                    <div className="bg-white p-12 rounded-[3rem] shadow-2xl text-center max-w-sm w-full">
-                        <div className="w-20 h-20 bg-indigo-600 rounded-3xl flex items-center justify-center text-white mx-auto mb-8 shadow-xl rotate-3">
+                    <div className="bg-white p-12 rounded-[3rem] shadow-2xl text-center max-w-sm w-full border border-white">
+                        <div className="w-20 h-20 bg-indigo-600 rounded-3xl flex items-center justify-center text-white mx-auto mb-8 shadow-xl rotate-3 shadow-indigo-200">
                             <i data-lucide="users" className="w-10 h-10"></i>
                         </div>
-                        <h1 className="text-3xl font-black text-slate-800 mb-2">Team Cards</h1>
-                        <p className="text-slate-400 text-sm mb-10">Leadgene 團隊共用名片系統</p>
-                        <button onClick={handleLogin} className="w-full py-4 border-2 border-slate-100 rounded-2xl font-bold flex items-center justify-center gap-3 hover:bg-slate-50 transition-all active:scale-95">
-                            <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-5 h-5"/>
+                        <h1 className="text-3xl font-black text-slate-800 mb-2 tracking-tighter">Team Cards</h1>
+                        <p className="text-slate-400 text-sm mb-10 font-medium">Leadgene 團隊共用名片系統</p>
+                        <button onClick={handleLogin} className="w-full py-4 bg-white border-2 border-slate-100 rounded-2xl font-bold flex items-center justify-center gap-3 hover:bg-slate-50 transition-all active:scale-95 shadow-sm text-slate-700">
+                            <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-5 h-5" alt="Google"/>
                             Google 登入
                         </button>
                     </div>
@@ -137,11 +161,11 @@
             );
 
             return (
-                <div className="min-h-screen">
+                <div className="min-h-screen bg-slate-50">
                     <nav className="sticky top-0 bg-white/80 backdrop-blur-md border-b h-20 flex items-center px-8 justify-between z-40">
                         <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg"><i data-lucide="users" className="w-6 h-6"></i></div>
-                            <span className="font-black text-slate-800 text-xl">SharedBook</span>
+                            <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-indigo-100"><i data-lucide="users" className="w-6 h-6"></i></div>
+                            <span className="font-black text-slate-800 text-xl tracking-tight">SharedBook</span>
                         </div>
                         <div className="flex items-center gap-4">
                             <button onClick={() => setIsModalOpen(true)} className="bg-slate-900 text-white px-6 py-2.5 rounded-2xl text-sm font-bold shadow-xl active:scale-95 transition-all">新增名片</button>
@@ -154,7 +178,7 @@
                             <i data-lucide="search" className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5"></i>
                             <input 
                                 type="text" placeholder="搜尋團隊共用名片..." 
-                                className="w-full pl-14 pr-6 py-4 rounded-3xl bg-white border-none shadow-xl focus:ring-4 focus:ring-indigo-500/10 outline-none text-lg"
+                                className="w-full pl-14 pr-6 py-4 rounded-3xl bg-white border-none shadow-xl shadow-slate-200/50 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all text-lg"
                                 value={searchTerm} onChange={e => setSearchTerm(e.target.value)}
                             />
                         </div>
@@ -162,13 +186,13 @@
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                             {cards.filter(c => c.name.toLowerCase().includes(searchTerm.toLowerCase())).map(card => (
                                 <div key={card.id} className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100 hover:shadow-2xl transition-all group relative">
-                                    <div className="absolute top-6 right-6 flex gap-2 opacity-0 group-hover:opacity-100 transition-all">
-                                        <button onClick={() => { setEditingId(card.id); setFormData(card); setIsModalOpen(true); }} className="p-2.5 bg-indigo-50 text-indigo-600 rounded-xl"><i data-lucide="edit-3" className="w-4 h-4"></i></button>
-                                        <button onClick={() => { if(confirm('刪除？')) db.collection('artifacts').doc('business-card-manager').collection('public').doc('data').collection('cards').doc(card.id).delete() }} className="p-2.5 bg-red-50 text-red-500 rounded-xl"><i data-lucide="trash-2" className="w-4 h-4"></i></button>
+                                    <div className="absolute top-6 right-6 flex gap-2 opacity-0 group-hover:opacity-100 transition-all translate-y-2 group-hover:translate-y-0">
+                                        <button onClick={() => { setEditingId(card.id); setFormData(card); setIsModalOpen(true); }} className="p-2.5 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-600 hover:text-white transition-all"><i data-lucide="edit-3" className="w-4 h-4"></i></button>
+                                        <button onClick={() => { if(confirm('刪除？')) db.collection('artifacts').doc('business-card-manager').collection('public').doc('data').collection('cards').doc(card.id).delete() }} className="p-2.5 bg-red-50 text-red-500 rounded-xl hover:bg-red-500 hover:text-white transition-all"><i data-lucide="trash-2" className="w-4 h-4"></i></button>
                                     </div>
-                                    <div className="w-16 h-16 bg-indigo-50 rounded-2xl flex items-center justify-center text-indigo-600 font-black text-2xl mb-6">{card.name[0]}</div>
+                                    <div className="w-16 h-16 bg-indigo-50 rounded-2xl flex items-center justify-center text-indigo-600 font-black text-2xl mb-6 shadow-inner">{card.name[0]}</div>
                                     <h3 className="font-black text-slate-800 text-xl mb-1">{card.name}</h3>
-                                    <p className="text-sm text-indigo-600 font-black mb-6 uppercase tracking-wide">{card.title || 'Personal'}</p>
+                                    <p className="text-sm text-indigo-600 font-black mb-6 tracking-wide uppercase">{card.title || 'Personal'}</p>
                                     <div className="space-y-3 pt-6 border-t border-slate-50 text-sm text-slate-500">
                                         <div className="flex items-center gap-3"><i data-lucide="building-2" className="w-4 h-4"></i>{card.company || '—'}</div>
                                         {card.phone && <div className="flex items-center gap-3"><i data-lucide="phone" className="w-4 h-4"></i>{card.phone}</div>}
@@ -182,8 +206,11 @@
 
                     {isModalOpen && (
                         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
-                            <div className="bg-white w-full max-w-lg rounded-[3.5rem] p-10 shadow-2xl">
-                                <h3 className="text-2xl font-black text-slate-800 mb-8">{editingId ? '修改名片' : '新增共用名片'}</h3>
+                            <div className="bg-white w-full max-w-lg rounded-[3.5rem] p-10 shadow-2xl animate-in zoom-in duration-300">
+                                <div className="flex justify-between items-center mb-8">
+                                    <h3 className="text-2xl font-black text-slate-800 tracking-tight">{editingId ? '修改名片' : '新增共用名片'}</h3>
+                                    <button onClick={closeModal} className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-slate-200 text-slate-400 transition-colors"><i data-lucide="x" className="w-6 h-6"></i></button>
+                                </div>
                                 <form onSubmit={handleSubmit} className="space-y-5">
                                     <input required placeholder="姓名 *" className="w-full px-6 py-4 bg-slate-50 rounded-2xl border-none outline-none focus:ring-4 focus:ring-indigo-500/10 text-slate-700 font-bold" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
                                     <div className="grid grid-cols-2 gap-5">
