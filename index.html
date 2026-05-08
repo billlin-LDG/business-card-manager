@@ -4,24 +4,27 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Leadgene 團隊共用名片簿</title>
+    <!-- 載入 Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 載入 React -->
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- 載入 Google Material Icons (解決 React 衝突問題) -->
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700;900&display=swap');
         body { font-family: 'Noto Sans TC', sans-serif; background-color: #f8fafc; }
-        .card-img-container { aspect-ratio: 16/9; }
+        .material-icons { vertical-align: middle; }
     </style>
 </head>
 <body>
     <div id="root">
-        <!-- 初始讀取提示 -->
+        <!-- 初始讀取提示，若發生嚴重錯誤畫面會停留在這裡 -->
         <div class="flex h-screen items-center justify-center bg-slate-50">
             <div class="text-center">
                 <div class="animate-spin rounded-full h-12 w-12 border-t-2 border-indigo-600 mx-auto mb-4"></div>
-                <p class="text-slate-400 font-bold">系統啟動中...</p>
+                <p class="text-slate-400 font-bold">系統啟動中，請稍候...</p>
             </div>
         </div>
     </div>
@@ -46,13 +49,13 @@
           measurementId: "G-5YEL14QEVX"
         };
 
-        // 安全初始化
+        // 安全初始化 Firebase
         try {
             if (!firebase.apps.length) {
                 firebase.initializeApp(firebaseConfig);
             }
         } catch (e) {
-            console.error("Firebase Init Error:", e);
+            console.error("Firebase 初始化錯誤:", e);
         }
 
         const auth = firebase.auth();
@@ -103,11 +106,12 @@
                         const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
                         setCards(list);
                     }, (err) => {
-                        console.error("Firestore error:", err);
+                        console.error("Firestore 讀取錯誤:", err);
                     });
                 return () => unsubscribe();
             }, [user]);
 
+            // 3. 處理圖片選擇
             const handleImageChange = (e) => {
                 const file = e.target.files[0];
                 if (file) {
@@ -122,6 +126,7 @@
                 }
             };
 
+            // 4. 提交表單 (包含圖片上傳)
             const handleSubmit = async (e) => {
                 e.preventDefault();
                 if (!user) return;
@@ -130,7 +135,7 @@
                 let finalImageUrl = formData.imageUrl || "";
 
                 try {
-                    // 若有選擇新圖，先上傳至 Storage
+                    // 上傳圖片至 Firebase Storage
                     if (imageFile) {
                         const fileName = `business-cards/${Date.now()}_${imageFile.name}`;
                         const storageRef = storage.ref(fileName);
@@ -152,8 +157,8 @@
                     }
                     closeModal();
                 } catch (error) {
-                    console.error("Save Error:", error);
-                    alert("儲存失敗：權限不足或網路問題。請確認 Firebase 規則已發佈。");
+                    console.error("儲存失敗:", error);
+                    alert("儲存失敗：請確認 Firebase Storage 規則已發佈。詳細錯誤請見控制台。");
                 } finally {
                     setUploading(false);
                 }
@@ -195,7 +200,7 @@
                     <div className="flex h-screen items-center justify-center bg-slate-100 p-4 text-center">
                         <div className="bg-white p-12 rounded-[3rem] shadow-2xl max-w-sm w-full">
                             <div className="w-20 h-20 bg-indigo-600 rounded-3xl flex items-center justify-center text-white mx-auto mb-8 shadow-xl rotate-3">
-                                <i data-lucide="users" className="w-10 h-10"></i>
+                                <span className="material-icons text-[40px]">group</span>
                             </div>
                             <h1 className="text-3xl font-black text-slate-800 mb-2">Team Cards</h1>
                             <p className="text-slate-400 text-sm mb-10 font-bold">共享數位名片資料庫</p>
@@ -208,24 +213,34 @@
                 );
             }
 
+            // 安全的搜尋過濾邏輯 (避免空值崩潰)
+            const filteredCards = cards.filter(c => {
+                const searchLower = (searchTerm || '').toLowerCase();
+                const nameMatch = (c.name || '').toLowerCase().includes(searchLower);
+                const companyMatch = (c.company || '').toLowerCase().includes(searchLower);
+                return nameMatch || companyMatch;
+            });
+
             return (
                 <div className="min-h-screen">
                     <nav className="sticky top-0 bg-white/90 backdrop-blur-md border-b h-20 flex items-center px-8 justify-between z-40 text-slate-800">
                         <div className="flex items-center gap-3">
                             <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-indigo-100">
-                                <i data-lucide="contact-2" className="w-6 h-6"></i>
+                                <span className="material-icons text-[24px]">contact_page</span>
                             </div>
                             <span className="font-black text-xl tracking-tight">Leadgene Shared</span>
                         </div>
                         <div className="flex items-center gap-4">
                             <button onClick={() => setIsModalOpen(true)} className="bg-slate-900 text-white px-6 py-2.5 rounded-2xl text-sm font-bold shadow-xl active:scale-95 transition-all hover:bg-indigo-600">新增名片</button>
-                            <button onClick={() => auth.signOut()} className="text-slate-300 hover:text-red-500 transition-colors"><i data-lucide="log-out" className="w-6 h-6"></i></button>
+                            <button onClick={() => auth.signOut()} className="text-slate-300 hover:text-red-500 transition-colors">
+                                <span className="material-icons text-[24px]">logout</span>
+                            </button>
                         </div>
                     </nav>
 
                     <main className="max-w-6xl mx-auto p-8">
                         <div className="relative mb-12 max-w-2xl mx-auto">
-                            <i data-lucide="search" className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5"></i>
+                            <span className="material-icons absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 text-[24px]">search</span>
                             <input 
                                 type="text" placeholder="搜尋團隊共用名片..." 
                                 className="w-full pl-14 pr-6 py-4 rounded-3xl bg-white border-none shadow-xl focus:ring-4 focus:ring-indigo-500/10 outline-none text-lg font-medium"
@@ -234,35 +249,39 @@
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                            {cards.filter(c => c.name?.toLowerCase().includes(searchTerm.toLowerCase())).map(card => (
+                            {filteredCards.map(card => (
                                 <div key={card.id} className="bg-white rounded-[2.5rem] shadow-sm border border-slate-100 hover:shadow-2xl transition-all group overflow-hidden flex flex-col">
                                     <div className="w-full h-48 bg-slate-50 relative flex items-center justify-center border-b border-slate-50 overflow-hidden">
                                         {card.imageUrl ? (
                                             <img src={card.imageUrl} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" alt={card.name} />
                                         ) : (
-                                            <div className="text-slate-200"><i data-lucide="image" className="w-12 h-12"></i></div>
+                                            <div className="text-slate-200"><span className="material-icons text-[48px]">image</span></div>
                                         )}
                                         <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-all translate-y-2 group-hover:translate-y-0">
-                                            <button onClick={() => openEditModal(card)} className="p-2.5 bg-white/90 backdrop-blur-md text-indigo-600 rounded-xl shadow-lg hover:bg-indigo-600 hover:text-white transition-all"><i data-lucide="edit-3" className="w-4 h-4"></i></button>
-                                            <button onClick={() => { if(confirm('確定刪除？')) db.collection('artifacts').doc('business-card-manager').collection('public').doc('data').collection('cards').doc(card.id).delete() }} className="p-2.5 bg-white/90 backdrop-blur-md text-red-500 rounded-xl shadow-lg hover:bg-red-500 hover:text-white transition-all"><i data-lucide="trash-2" className="w-4 h-4"></i></button>
+                                            <button onClick={() => openEditModal(card)} className="p-2.5 bg-white/90 backdrop-blur-md text-indigo-600 rounded-xl shadow-lg hover:bg-indigo-600 hover:text-white transition-all">
+                                                <span className="material-icons text-[18px]">edit</span>
+                                            </button>
+                                            <button onClick={() => { if(confirm('確定刪除？')) db.collection('artifacts').doc('business-card-manager').collection('public').doc('data').collection('cards').doc(card.id).delete() }} className="p-2.5 bg-white/90 backdrop-blur-md text-red-500 rounded-xl shadow-lg hover:bg-red-500 hover:text-white transition-all">
+                                                <span className="material-icons text-[18px]">delete</span>
+                                            </button>
                                         </div>
                                     </div>
                                     <div className="p-8">
                                         <div className="flex items-center gap-4 mb-4">
-                                            <div className="w-12 h-12 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600 font-black text-xl flex-shrink-0">{card.name?.[0]}</div>
+                                            <div className="w-12 h-12 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600 font-black text-xl flex-shrink-0">{card.name?.[0] || '?'}</div>
                                             <div className="min-w-0">
-                                                <h3 className="font-black text-slate-800 text-lg truncate">{card.name}</h3>
+                                                <h3 className="font-black text-slate-800 text-lg truncate">{card.name || '未命名'}</h3>
                                                 <p className="text-xs text-indigo-600 font-bold uppercase truncate">{card.title || 'Personal'}</p>
                                             </div>
                                         </div>
                                         <div className="space-y-3 text-sm text-slate-500 font-medium">
-                                            <div className="flex items-center gap-3"><i data-lucide="building-2" className="w-4 h-4 text-slate-300"></i><span className="truncate">{card.company || '—'}</span></div>
-                                            {card.phone && <div className="flex items-center gap-3"><i data-lucide="phone" className="w-4 h-4 text-slate-300"></i>{card.phone}</div>}
-                                            {card.email && <div className="flex items-center gap-3"><i data-lucide="mail" className="w-4 h-4 text-slate-300"></i><span className="truncate">{card.email}</span></div>}
+                                            <div className="flex items-center gap-3"><span className="material-icons text-[18px] text-slate-300">business</span><span className="truncate">{card.company || '—'}</span></div>
+                                            {card.phone && <div className="flex items-center gap-3"><span className="material-icons text-[18px] text-slate-300">phone</span>{card.phone}</div>}
+                                            {card.email && <div className="flex items-center gap-3"><span className="material-icons text-[18px] text-slate-300">email</span><span className="truncate">{card.email}</span></div>}
                                         </div>
                                         <div className="mt-6 pt-4 border-t border-slate-50 text-[10px] text-slate-300 font-bold flex justify-between uppercase tracking-tighter">
                                             <span>Author: {card.createdBy?.split('@')[0]}</span>
-                                            <span>{new Date(card.createdAt).toLocaleDateString()}</span>
+                                            <span>{card.createdAt ? new Date(card.createdAt).toLocaleDateString() : ''}</span>
                                         </div>
                                     </div>
                                 </div>
@@ -275,7 +294,9 @@
                             <div className="bg-white w-full max-w-lg rounded-[3.5rem] p-10 shadow-2xl my-auto animate-in zoom-in duration-300">
                                 <div className="flex justify-between items-center mb-8">
                                     <h3 className="text-2xl font-black text-slate-800">{editingId ? '修改名片' : '新增共用名片'}</h3>
-                                    <button onClick={closeModal} className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-slate-100 text-slate-400 transition-colors"><i data-lucide="x" className="w-6 h-6"></i></button>
+                                    <button onClick={closeModal} className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-slate-100 text-slate-400 transition-colors">
+                                        <span className="material-icons text-[24px]">close</span>
+                                    </button>
                                 </div>
                                 <form onSubmit={handleSubmit} className="space-y-5">
                                     <div className="space-y-2">
@@ -285,8 +306,8 @@
                                                 <img src={imagePreview} className="w-full h-full object-cover" />
                                             ) : (
                                                 <>
-                                                    <i data-lucide="camera" className="w-8 h-8 text-slate-300 mb-2"></i>
-                                                    <span className="text-xs text-slate-400 font-bold">選擇檔案</span>
+                                                    <span className="material-icons text-[32px] text-slate-300 mb-2">photo_camera</span>
+                                                    <span className="text-xs text-slate-400 font-bold">選擇照片檔案</span>
                                                 </>
                                             )}
                                         </div>
@@ -308,7 +329,7 @@
                                             {uploading ? (
                                                 <>
                                                     <div className="animate-spin h-4 w-4 border-2 border-white/20 border-t-white rounded-full"></div>
-                                                    <span>處理中...</span>
+                                                    <span>上傳處理中...</span>
                                                 </>
                                             ) : "儲存共享"}
                                         </button>
@@ -323,13 +344,6 @@
 
         const root = ReactDOM.createRoot(document.getElementById('root'));
         root.render(<App />);
-
-        // 將圖標生成移到 React 渲染之外，避免白畫面崩潰
-        setInterval(() => {
-            if (typeof lucide !== 'undefined') {
-                lucide.createIcons();
-            }
-        }, 1000);
     </script>
 </body>
 </html>
