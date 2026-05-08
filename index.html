@@ -10,7 +10,7 @@
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <!-- 載入 Google Material Icons (解決 React 衝突問題) -->
+    <!-- 載入 Google Material Icons -->
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700;900&display=swap');
@@ -20,7 +20,6 @@
 </head>
 <body>
     <div id="root">
-        <!-- 初始讀取提示，若發生嚴重錯誤畫面會停留在這裡 -->
         <div class="flex h-screen items-center justify-center bg-slate-50">
             <div class="text-center">
                 <div class="animate-spin rounded-full h-12 w-12 border-t-2 border-indigo-600 mx-auto mb-4"></div>
@@ -29,11 +28,10 @@
         </div>
     </div>
 
-    <!-- Firebase SDK -->
+    <!-- Firebase SDK (已移除 Storage 模組，不需要綁信用卡了) -->
     <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-storage-compat.js"></script>
 
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
@@ -49,7 +47,6 @@
           measurementId: "G-5YEL14QEVX"
         };
 
-        // 安全初始化 Firebase
         try {
             if (!firebase.apps.length) {
                 firebase.initializeApp(firebaseConfig);
@@ -60,7 +57,6 @@
 
         const auth = firebase.auth();
         const db = firebase.firestore();
-        const storage = firebase.storage();
         const provider = new firebase.auth.GoogleAuthProvider();
 
         const ALLOWED_DOMAINS = ["leadgene.com.tw"];
@@ -73,12 +69,9 @@
             const [searchTerm, setSearchTerm] = useState('');
             const [isModalOpen, setIsModalOpen] = useState(false);
             const [formData, setFormData] = useState({ name: '', title: '', company: '', phone: '', email: '', note: '', imageUrl: '' });
-            const [imageFile, setImageFile] = useState(null);
-            const [imagePreview, setImagePreview] = useState(null);
             const [editingId, setEditingId] = useState(null);
             const fileInputRef = useRef(null);
 
-            // 1. 監聽登入狀態
             useEffect(() => {
                 const unsubscribe = auth.onAuthStateChanged((u) => {
                     if (u) {
@@ -97,7 +90,6 @@
                 return () => unsubscribe();
             }, []);
 
-            // 2. 讀取名片資料
             useEffect(() => {
                 if (!user) return;
                 const unsubscribe = db.collection('artifacts').doc('business-card-manager').collection('public').doc('data').collection('cards')
@@ -111,45 +103,64 @@
                 return () => unsubscribe();
             }, [user]);
 
-            // 3. 處理圖片選擇
+            // --- 圖片壓縮轉碼處理 (替代 Firebase Storage 方案) ---
             const handleImageChange = (e) => {
                 const file = e.target.files[0];
-                if (file) {
-                    if (file.size > 5 * 1024 * 1024) {
-                        alert("檔案超過 5MB 限制");
-                        return;
-                    }
-                    setImageFile(file);
-                    const reader = new FileReader();
-                    reader.onloadend = () => setImagePreview(reader.result);
-                    reader.readAsDataURL(file);
+                if (!file) return;
+
+                // 檢查是否為圖片
+                if (!file.type.startsWith('image/')) {
+                    alert('請上傳圖片格式檔案');
+                    return;
                 }
+
+                setUploading(true); // 顯示處理中
+
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    const img = new Image();
+                    img.src = event.target.result;
+                    img.onload = () => {
+                        // 建立 Canvas 來進行圖片壓縮
+                        const canvas = document.createElement('canvas');
+                        const MAX_WIDTH = 600; // 限制最大寬度以縮小檔案體積
+                        let width = img.width;
+                        let height = img.height;
+
+                        if (width > MAX_WIDTH) {
+                            height = Math.round((height *= MAX_WIDTH / width));
+                            width = MAX_WIDTH;
+                        }
+
+                        canvas.width = width;
+                        canvas.height = height;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0, width, height);
+
+                        // 壓縮成 JPEG，品質設定為 0.7 (70%)
+                        const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7);
+                        
+                        // 直接將壓縮後的 Base64 文字存入 formData
+                        setFormData(prev => ({ ...prev, imageUrl: compressedBase64 }));
+                        setUploading(false);
+                    };
+                };
+                reader.readAsDataURL(file);
             };
 
-            // 4. 提交表單 (包含圖片上傳)
             const handleSubmit = async (e) => {
                 e.preventDefault();
                 if (!user) return;
                 setUploading(true);
 
-                let finalImageUrl = formData.imageUrl || "";
-
                 try {
-                    // 上傳圖片至 Firebase Storage
-                    if (imageFile) {
-                        const fileName = `business-cards/${Date.now()}_${imageFile.name}`;
-                        const storageRef = storage.ref(fileName);
-                        const snapshot = await storageRef.put(imageFile);
-                        finalImageUrl = await snapshot.ref.getDownloadURL();
-                    }
-
                     const ref = db.collection('artifacts').doc('business-card-manager').collection('public').doc('data').collection('cards');
                     const payload = { 
                         ...formData, 
-                        imageUrl: finalImageUrl, 
                         updatedAt: Date.now() 
                     };
 
+                    // Firestore 文件大小限制為 1MB，壓縮後通常只有幾十 KB，可以安全直接存入
                     if (editingId) {
                         await ref.doc(editingId).update({ ...payload, lastUpdatedBy: user.email });
                     } else {
@@ -158,7 +169,7 @@
                     closeModal();
                 } catch (error) {
                     console.error("儲存失敗:", error);
-                    alert("儲存失敗：請確認 Firebase Storage 規則已發佈。詳細錯誤請見控制台。");
+                    alert(`儲存失敗！錯誤碼: ${error.code}\n可能原因：圖片壓縮後仍然太大，或 Firestore 規則未正確設定。`);
                 } finally {
                     setUploading(false);
                 }
@@ -168,8 +179,6 @@
                 setIsModalOpen(false);
                 setEditingId(null);
                 setFormData({ name: '', title: '', company: '', phone: '', email: '', note: '', imageUrl: '' });
-                setImageFile(null);
-                setImagePreview(null);
             };
 
             const openEditModal = (card) => {
@@ -183,17 +192,10 @@
                     note: card.note || '', 
                     imageUrl: card.imageUrl || '' 
                 });
-                setImagePreview(card.imageUrl || null);
                 setIsModalOpen(true);
             };
 
-            if (loading) {
-                return (
-                    <div className="flex h-screen items-center justify-center bg-slate-50">
-                        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-indigo-600"></div>
-                    </div>
-                );
-            }
+            if (loading) return <div className="flex h-screen items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-t-2 border-indigo-600"></div></div>;
 
             if (!user) {
                 return (
@@ -213,7 +215,6 @@
                 );
             }
 
-            // 安全的搜尋過濾邏輯 (避免空值崩潰)
             const filteredCards = cards.filter(c => {
                 const searchLower = (searchTerm || '').toLowerCase();
                 const nameMatch = (c.name || '').toLowerCase().includes(searchLower);
@@ -251,11 +252,11 @@
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                             {filteredCards.map(card => (
                                 <div key={card.id} className="bg-white rounded-[2.5rem] shadow-sm border border-slate-100 hover:shadow-2xl transition-all group overflow-hidden flex flex-col">
-                                    <div className="w-full h-48 bg-slate-50 relative flex items-center justify-center border-b border-slate-50 overflow-hidden">
+                                    <div className="w-full h-56 bg-slate-100 relative flex items-center justify-center border-b border-slate-100 overflow-hidden">
                                         {card.imageUrl ? (
-                                            <img src={card.imageUrl} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" alt={card.name} />
+                                            <img src={card.imageUrl} className="w-full h-full object-contain p-4 group-hover:scale-105 transition-transform duration-500 drop-shadow-md" alt={card.name} />
                                         ) : (
-                                            <div className="text-slate-200"><span className="material-icons text-[48px]">image</span></div>
+                                            <div className="text-slate-300"><span className="material-icons text-[48px]">image</span></div>
                                         )}
                                         <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-all translate-y-2 group-hover:translate-y-0">
                                             <button onClick={() => openEditModal(card)} className="p-2.5 bg-white/90 backdrop-blur-md text-indigo-600 rounded-xl shadow-lg hover:bg-indigo-600 hover:text-white transition-all">
@@ -300,14 +301,16 @@
                                 </div>
                                 <form onSubmit={handleSubmit} className="space-y-5">
                                     <div className="space-y-2">
-                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">名片照片 (點擊上傳)</label>
-                                        <div onClick={() => fileInputRef.current.click()} className="w-full h-40 bg-slate-50 rounded-3xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center cursor-pointer hover:bg-slate-100 transition-all overflow-hidden relative group">
-                                            {imagePreview ? (
-                                                <img src={imagePreview} className="w-full h-full object-cover" />
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">名片照片 (自動壓縮)</label>
+                                        <div onClick={() => fileInputRef.current.click()} className="w-full h-48 bg-slate-50 rounded-3xl border-2 border-dashed border-slate-300 flex flex-col items-center justify-center cursor-pointer hover:bg-slate-100 transition-all overflow-hidden relative group">
+                                            {uploading && formData.imageUrl === '' ? (
+                                                <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-indigo-600"></div>
+                                            ) : formData.imageUrl ? (
+                                                <img src={formData.imageUrl} className="w-full h-full object-contain p-2" />
                                             ) : (
                                                 <>
                                                     <span className="material-icons text-[32px] text-slate-300 mb-2">photo_camera</span>
-                                                    <span className="text-xs text-slate-400 font-bold">選擇照片檔案</span>
+                                                    <span className="text-xs text-slate-400 font-bold">點擊選擇照片 (自動壓縮轉存)</span>
                                                 </>
                                             )}
                                         </div>
@@ -329,7 +332,7 @@
                                             {uploading ? (
                                                 <>
                                                     <div className="animate-spin h-4 w-4 border-2 border-white/20 border-t-white rounded-full"></div>
-                                                    <span>上傳處理中...</span>
+                                                    <span>處理中...</span>
                                                 </>
                                             ) : "儲存共享"}
                                         </button>
