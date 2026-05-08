@@ -72,12 +72,15 @@
 
             useEffect(() => {
                 if (!user) return;
+                // 確保路徑與 Rules 嚴格一致
                 const unsubscribe = db.collection('artifacts').doc('business-card-manager').collection('public').doc('data').collection('cards')
                     .orderBy('createdAt', 'desc')
                     .onSnapshot(snap => {
                         const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
                         setCards(list);
-                    }, (err) => console.error("Firestore error:", err));
+                    }, (err) => {
+                        console.error("Firestore error:", err.code);
+                    });
                 return () => unsubscribe();
             }, [user]);
 
@@ -91,17 +94,28 @@
 
             const handleSubmit = async (e) => {
                 e.preventDefault();
+                if (!user) return;
+
                 const ref = db.collection('artifacts').doc('business-card-manager').collection('public').doc('data').collection('cards');
+                
                 try {
                     if (editingId) {
-                        await ref.doc(editingId).update({ ...formData, lastUpdatedBy: user.email });
+                        await ref.doc(editingId).update({ 
+                            ...formData, 
+                            lastUpdatedBy: user.email,
+                            updatedAt: Date.now()
+                        });
                     } else {
-                        await ref.add({ ...formData, createdAt: Date.now(), createdBy: user.email });
+                        await ref.add({ 
+                            ...formData, 
+                            createdAt: Date.now(), 
+                            createdBy: user.email 
+                        });
                     }
                     closeModal();
                 } catch (error) {
-                    console.error("Save error details:", error);
-                    alert("儲存失敗！\n錯誤碼：" + error.code + "\n原因：您的 Google 帳號可能不具備寫入權限，請確認是否為 @leadgene.com.tw 帳號並已發佈 Firebase 規則。");
+                    console.error("Save error:", error.code);
+                    alert("儲存失敗！\n錯誤碼：" + error.code + "\n原因：請確認您是否已在 Firebase 控制台按下『發佈』按鈕，且登入帳號正確。");
                 }
             };
 
@@ -111,14 +125,14 @@
                 setFormData({ name: '', title: '', company: '', phone: '', email: '', note: '' });
             };
 
-            if (loading) return <div className="flex h-screen items-center justify-center">載入中...</div>;
+            if (loading) return <div className="flex h-screen items-center justify-center font-bold text-slate-400">系統連接中...</div>;
 
             if (isDenied) return (
                 <div className="flex h-screen items-center justify-center bg-slate-100 p-4 text-center">
-                    <div className="bg-white p-10 rounded-[2.5rem] shadow-xl max-w-sm w-full">
-                        <h2 className="text-2xl font-bold text-red-500 mb-4">存取受限</h2>
-                        <p className="text-slate-500 text-sm">此系統僅限公司網域員工使用。</p>
-                        <button onClick={() => setIsDenied(false)} className="mt-8 w-full py-4 bg-slate-900 text-white rounded-2xl font-bold">返回登入</button>
+                    <div className="bg-white p-10 rounded-[2.5rem] shadow-xl max-w-sm w-full border border-red-50">
+                        <h2 className="text-2xl font-bold text-red-500 mb-4">存取拒絕</h2>
+                        <p className="text-slate-500 text-sm">此系統僅限 @leadgene.com.tw 帳號使用。</p>
+                        <button onClick={() => setIsDenied(false)} className="mt-8 w-full py-4 bg-slate-900 text-white rounded-2xl font-bold">切換帳號</button>
                     </div>
                 </div>
             );
@@ -131,9 +145,9 @@
                         </div>
                         <h1 className="text-3xl font-black text-slate-800 mb-2 tracking-tighter">Team Cards</h1>
                         <p className="text-slate-400 text-sm mb-10">Leadgene 團隊共用名片系統</p>
-                        <button onClick={handleLogin} className="w-full py-4 border-2 border-slate-100 rounded-2xl font-bold flex items-center justify-center gap-3 hover:bg-slate-50 transition-all active:scale-95">
+                        <button onClick={handleLogin} className="w-full py-4 border-2 border-slate-100 rounded-2xl font-bold flex items-center justify-center gap-3 hover:bg-slate-50 active:scale-95 transition-all">
                             <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-5 h-5" alt="Google"/>
-                            Google 登入
+                            Google 帳號登入
                         </button>
                     </div>
                 </div>
@@ -156,8 +170,8 @@
                         <div className="relative mb-12 max-w-2xl mx-auto">
                             <i data-lucide="search" className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5"></i>
                             <input 
-                                type="text" placeholder="搜尋團隊共用名片..." 
-                                className="w-full pl-14 pr-6 py-4 rounded-3xl bg-white border-none shadow-xl focus:ring-4 focus:ring-indigo-500/10 outline-none text-lg"
+                                type="text" placeholder="搜尋姓名、職位..." 
+                                className="w-full pl-14 pr-6 py-4 rounded-3xl bg-white border-none shadow-xl focus:ring-4 focus:ring-indigo-500/10 outline-none text-lg font-medium"
                                 value={searchTerm} onChange={e => setSearchTerm(e.target.value)}
                             />
                         </div>
@@ -166,10 +180,10 @@
                             {cards.filter(c => c.name.toLowerCase().includes(searchTerm.toLowerCase())).map(card => (
                                 <div key={card.id} className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100 hover:shadow-2xl transition-all group relative">
                                     <div className="absolute top-6 right-6 flex gap-2 opacity-0 group-hover:opacity-100 transition-all translate-y-2 group-hover:translate-y-0">
-                                        <button onClick={() => { setEditingId(card.id); setFormData(card); setIsModalOpen(true); }} className="p-2.5 bg-indigo-50 text-indigo-600 rounded-xl"><i data-lucide="edit-3" className="w-4 h-4"></i></button>
-                                        <button onClick={() => { if(confirm('刪除？')) db.collection('artifacts').doc('business-card-manager').collection('public').doc('data').collection('cards').doc(card.id).delete() }} className="p-2.5 bg-red-50 text-red-500 rounded-xl"><i data-lucide="trash-2" className="w-4 h-4"></i></button>
+                                        <button onClick={() => { setEditingId(card.id); setFormData(card); setIsModalOpen(true); }} className="p-2.5 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-600 hover:text-white transition-all"><i data-lucide="edit-3" className="w-4 h-4"></i></button>
+                                        <button onClick={() => { if(confirm('確定刪除此共用名片？')) db.collection('artifacts').doc('business-card-manager').collection('public').doc('data').collection('cards').doc(card.id).delete() }} className="p-2.5 bg-red-50 text-red-500 rounded-xl hover:bg-red-500 hover:text-white transition-all"><i data-lucide="trash-2" className="w-4 h-4"></i></button>
                                     </div>
-                                    <div className="w-16 h-16 bg-indigo-50 rounded-2xl flex items-center justify-center text-indigo-600 font-black text-2xl mb-6 shadow-inner">{card.name[0]}</div>
+                                    <div className="w-16 h-16 bg-indigo-50 rounded-2xl flex items-center justify-center text-indigo-600 font-black text-2xl mb-6">{card.name[0]}</div>
                                     <h3 className="font-black text-slate-800 text-xl mb-1">{card.name}</h3>
                                     <p className="text-sm text-indigo-600 font-black mb-6 tracking-wide uppercase">{card.title || 'Personal'}</p>
                                     <div className="space-y-3 pt-6 border-t border-slate-50 text-sm text-slate-500">
@@ -177,7 +191,9 @@
                                         {card.phone && <div className="flex items-center gap-3"><i data-lucide="phone" className="w-4 h-4"></i>{card.phone}</div>}
                                         {card.email && <div className="flex items-center gap-3"><i data-lucide="mail" className="w-4 h-4"></i><span className="truncate">{card.email}</span></div>}
                                     </div>
-                                    <div className="mt-6 pt-4 border-t border-slate-50 text-[10px] text-slate-300 font-bold uppercase tracking-tighter">By: {card.createdBy?.split('@')[0]}</div>
+                                    <div className="mt-6 pt-4 border-t border-slate-50 text-[10px] text-slate-300 font-bold uppercase tracking-tighter">
+                                        Added by: {card.createdBy?.split('@')[0]}
+                                    </div>
                                 </div>
                             ))}
                         </div>
@@ -185,11 +201,8 @@
 
                     {isModalOpen && (
                         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
-                            <div className="bg-white w-full max-w-lg rounded-[3.5rem] p-10 shadow-2xl animate-in zoom-in duration-300">
-                                <div className="flex justify-between items-center mb-8">
-                                    <h3 className="text-2xl font-black text-slate-800 tracking-tight">{editingId ? '修改名片' : '新增共用名片'}</h3>
-                                    <button onClick={closeModal} className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-slate-200 text-slate-400 transition-colors"><i data-lucide="x" className="w-6 h-6"></i></button>
-                                </div>
+                            <div className="bg-white w-full max-w-lg rounded-[3.5rem] p-10 shadow-2xl">
+                                <h3 className="text-2xl font-black text-slate-800 mb-8 tracking-tight">{editingId ? '修改名片內容' : '新增共用名片'}</h3>
                                 <form onSubmit={handleSubmit} className="space-y-5">
                                     <input required placeholder="姓名 *" className="w-full px-6 py-4 bg-slate-50 rounded-2xl border-none outline-none focus:ring-4 focus:ring-indigo-500/10 text-slate-700 font-bold" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
                                     <div className="grid grid-cols-2 gap-5">
@@ -198,9 +211,9 @@
                                     </div>
                                     <input placeholder="電話" className="w-full px-6 py-4 bg-slate-50 rounded-2xl border-none outline-none focus:ring-4 focus:ring-indigo-500/10 text-slate-700 font-bold" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} />
                                     <input type="email" placeholder="Email" className="w-full px-6 py-4 bg-slate-50 rounded-2xl border-none outline-none focus:ring-4 focus:ring-indigo-500/10 text-slate-700 font-bold" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} />
-                                    <textarea placeholder="備註" rows="2" className="w-full px-6 py-4 bg-slate-50 rounded-2xl border-none outline-none focus:ring-4 focus:ring-indigo-500/10 text-slate-700 font-bold" value={formData.note} onChange={e => setFormData({...formData, note: e.target.value})} />
+                                    <textarea placeholder="備註或細節" rows="2" className="w-full px-6 py-4 bg-slate-50 rounded-2xl border-none outline-none focus:ring-4 focus:ring-indigo-500/10 text-slate-700 font-bold" value={formData.note} onChange={e => setFormData({...formData, note: e.target.value})} />
                                     <div className="pt-6 flex gap-4">
-                                        <button type="button" onClick={closeModal} className="flex-1 py-4 text-slate-400 font-black uppercase text-xs">取消</button>
+                                        <button type="button" onClick={closeModal} className="flex-1 py-4 text-slate-400 font-black uppercase text-xs tracking-widest">取消</button>
                                         <button type="submit" className="flex-[2] py-4 bg-indigo-600 text-white rounded-[1.5rem] font-black shadow-lg uppercase text-xs tracking-widest">儲存共享</button>
                                     </div>
                                 </form>
